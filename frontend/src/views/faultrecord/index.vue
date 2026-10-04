@@ -67,6 +67,7 @@
       <span>共 {{ total }} 条故障录波记录</span>
       <span v-if="errorMessage" class="error-text">{{ errorMessage }}</span>
     </footer>
+    <EntryCreateDialog :open="createOpen" :meta="meta" @close="createOpen = false" @registered="onRegistered" />
   </section>
 </template>
 
@@ -79,6 +80,7 @@ import {
   moduleMeta,
   runAction as applyAction,
 } from '@/api/local-service'
+import EntryCreateDialog from '@/components/EntryCreateDialog.vue'
 import type { EntryRow } from '@/data/types'
 
 const meta = moduleMeta('faultrecord')
@@ -108,8 +110,15 @@ function exportRows() {
   downloadEntries(meta.key)
 }
 
+const createOpen = ref(false)
+
 function openCreate() {
-  errorMessage.value = '录波记录登记入口尚未接入审批流'
+  createOpen.value = true
+}
+
+function onRegistered() {
+  createOpen.value = false
+  reload()
 }
 
 function runAction(action: string, row: EntryRow) {

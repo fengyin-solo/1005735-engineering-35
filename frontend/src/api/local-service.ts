@@ -1,5 +1,13 @@
 import { MODULE_BY_KEY } from '@/data/modules'
-import { allRows, listRows, resetRows, saveRows } from '@/data/local-store'
+import {
+  allRows,
+  listRows,
+  resetAllRows,
+  resetRows,
+  saveRows,
+} from '@/data/local-store'
+import { SEED_ROWS } from '@/data/seed'
+import { isValidRow } from '@/data/seed-rules'
 import type { ActionResult, EntryRow, ModuleMeta, OverviewResult, PageResult } from '@/data/types'
 
 // 会写进数据的「往回走」动作：命中就把这条记录标成异常态，看板上能一眼看出来。
@@ -26,6 +34,44 @@ export function filterRows(rows: EntryRow[], filters: Record<string, string>): E
 export function listEntries(key: string, filters: Record<string, string> = {}): PageResult {
   const matched = filterRows(listRows(key), filters)
   return { items: matched, total: matched.length, page: 1, size: matched.length }
+}
+
+// 各业务模块「登记总量」的唯一口径：无筛选时直接取该模块的条目数。
+// 运营概览汇总各模块时也用同一个函数，两处数字必须对得齐。
+export function countEntries(key: string): number {
+  return listRows(key).length
+}
+
+// 登记新条目：非法值在写入前挡回，绝不落进本地数据。
+// pending / abnormal 由服务层按既有规则给出，不接受调用方塞进来的值。
+export function createEntry(key: string, form: Record<string, string>): ActionResult {
+  const meta = moduleMeta(key)
+  const values: Record<string, string> = {}
+  for (const field of meta.fields) {
+    const value = String(form[field] ?? '').trim()
+    values[field] = value
+  }
+  // 第一个字段是该业务对象的主标识（站名/装置编号/定值单号……），不允许空登记。
+  const primary = meta.fields[0]
+  if (values[primary] === '') {
+    return { ok: false, message: `${primary}不能为空，${meta.entity}没有登记成功` }
+  }
+  const rows = listRows(key)
+  const nextId = rows.reduce((max, row) => Math.max(max, Number(row.id) || 0), 0) + 1
+  const firstStatus = meta.statuses[0]
+  const row: EntryRow = {
+    id: nextId,
+    status: firstStatus,
+    pending: true,
+    abnormal: false,
+    ...values,
+  }
+  if (!isValidRow(row)) {
+    // 兜底：任何不符合数据层契约的记录都不允许写入。
+    return { ok: false, message: `${meta.entity}登记内容含有非法值，已挡回` }
+  }
+  saveRows(key, [...rows, row])
+  return { ok: true, message: `${meta.entity}已登记，当前状态「${firstStatus}」` }
 }
 
 export function runAction(key: string, id: number, action: string): ActionResult {
@@ -61,6 +107,17 @@ export function resetModule(key: string): PageResult {
   return listEntries(key)
 }
 
+// 全部模块复位：一次性把各模块待办清单收回示例起点（全量覆盖，不追加）。
+export function resetAllModules(): OverviewResult {
+  resetAllRows()
+  return loadOverview()
+}
+
+// 示例起点下每个模块的条目数：复位结果与这份基线对齐，多一条少一条都算复位失败。
+export function seedBaselineCounts(): Record<string, number> {
+  return Object.fromEntries(Object.keys(SEED_ROWS).map((key) => [key, SEED_ROWS[key].length]))
+}
+
 export function exportEntries(key: string): { filename: string; content: string } {
   const meta = moduleMeta(key)
   const header = ['编号', ...meta.fields, '当前状态']
@@ -68,7 +125,7 @@ export function exportEntries(key: string): { filename: string; content: string 
   for (const row of listRows(key)) {
     lines.push([row.id, ...meta.fields.map((field) => row[field] ?? ''), row.status].join(','))
   }
-  return { filename: `${meta.name}-清单.csv`, content: `\uFEFF${lines.join('\n')}` }
+  return { filename: `${meta.name}-清单.csv`, content: `﻿${lines.join('\n')}` }
 }
 
 export function downloadEntries(key: string): void {
@@ -85,12 +142,12 @@ export function downloadEntries(key: string): void {
 }
 
 export function loadOverview(): OverviewResult {
-  const rows = allRows()
   const modules = [...MODULE_BY_KEY.values()].map((meta) => {
-    const entries = rows[meta.key] ?? []
+    // 与模块列表页同一个数据源、同一个计数口径（countEntries）。
+    const entries = allRows()[meta.key] ?? []
     return {
       name: meta.name,
-      created: entries.length,
+      created: countEntries(meta.key),
       pending: entries.filter((row) => row.pending).length,
       abnormal: entries.filter((row) => row.abnormal).length,
     }

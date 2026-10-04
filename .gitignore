@@ -85,3 +85,7 @@ desktop.ini
 *.db
 *.pid
 *.seed
+
+# 本地开发复位令牌：npm run reset:dev 生成，仅本机生效，不入库
+frontend/public/seed-reset.json
+frontend/public/.seed-reset.tmp

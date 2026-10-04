@@ -13,23 +13,45 @@
 .
 ├── frontend/                 Vue 3 + Vite + TypeScript 前端（唯一运行单元）
 │   ├── src/views/            每个业务模块一个页面
-│   ├── src/api/local-service.ts   本地数据服务：列表、筛选、动作流转、导出
-│   ├── src/data/             模块元数据 / 示例数据 / localStorage 持久化
-│   ├── src/stores/           会话与筛选状态
+│   ├── src/api/local-service.ts   本地数据服务：登记、筛选、动作流转、复位、导出
+│   ├── src/data/             模块元数据 / localStorage 持久化（示例数据在 ../sample/seed.json）
+│   ├── sample/seed.json      示例数据唯一权威源（setup 与 reset:dev 共用）
 │   └── vite.config.ts        dev server 配置（open: false，无 /api 代理）
 ├── .gitignore
 └── docker-compose.yml
 ```
 
-## 启动
+## 启动（新同事照这两步即可）
 
 ```bash
 cd frontend
-npm install
+npm run setup      # 一条命令：按锁文件装齐依赖 + 校验示例数据
 npm run dev
 ```
 
+`npm run setup` 可以反复执行：依赖已与 `package-lock.json` 一致时会跳过安装，装到一半中断后重跑
+会自动补齐；示例数据来自唯一权威源 `frontend/sample/seed.json`（当前版本 `2026.10.0`，
+18 个模块共 54 条），首次打开页面时自动播种进浏览器 `localStorage`。
+
+> 依赖版本一律精确钉在 `package.json` 与 `package-lock.json` 里，安装走 `npm ci`，
+> 不会再出现「本机留的是上月那份、几个人版本对不上」的情况。
+
 前端默认监听 `http://127.0.0.1:5173/`，dev server 不会自动打开浏览器，需要自己访问。
+
+### 把本地数据收回初始状态（仅本地开发）
+
+```bash
+npm run reset:dev   # 或在仓库根目录执行 make reset
+```
+
+该命令写入一个本地复位令牌（`public/seed-reset.json`，已在 `.gitignore`，不入库、不影响生产）。
+**刷新（或打开）页面**后，应用发现令牌更新，就把 `localStorage` 里各模块数据**全量覆盖**回
+`sample/seed.json`：
+
+- 两条命令（setup / reset:dev）用的是同一份 `sample/seed.json`，不会装出两份数据；
+- 复位是覆盖而不是追加，反复执行、反复刷新都不会多出条目，每个模块的待办清单严格回到起点
+  （每模块 3 条、其中 2 条待办）；
+- 运营概览页在 dev 下还有一个「收回示例数据（本地开发）」按钮，可直接在页面里复位。
 
 生产构建：
 
@@ -68,4 +90,12 @@ npm run build
 - 字段、状态、动作与流转目标集中在 `frontend/src/data/modules.ts`；示例数据在
   `frontend/src/data/seed.ts`。
 - 状态流转只允许在 `local-service.ts` 里改，页面组件不做业务判断。
-- 想回到初始数据：清掉浏览器里 `substation-protection:entries` 这一项，或调用 `resetModule(模块)`。
+- 示例数据的唯一权威源是 `frontend/sample/seed.json`，版本与校验规则在
+  `frontend/src/data/seed-rules.ts`（浏览器侧）与 `frontend/scripts/seed-lib.mjs`（CLI 侧），
+  两边由 `frontend/__tests__/seed-parity.test.ts` 钉住一致。
+- localStorage 按「版本 + 示例指纹」整体播种：本机旧数据版本对不上时直接整体替换（不合并、
+  不追加）；混进非法记录（异常量/待办不是布尔值、id 非法）的模块会被挡回示例基线。
+- 运营概览的「登记总量」与各模块列表用同一个计数函数（`countEntries`），两处永远对得齐；
+  登记走 `createEntry`，非法值在写入前挡回。
+- 想回到初始数据：`npm run reset:dev` 后刷新页面，或在运营概览页点「收回示例数据（本地开发）」；
+  也可以只复位单个模块（`resetModule(模块)`）。

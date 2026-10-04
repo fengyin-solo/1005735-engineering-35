@@ -6,6 +6,7 @@
         <p class="page-desc">汇总各业务模块的关键指标，先看总量再看异常。</p>
       </div>
       <div class="page-actions">
+        <button v-if="devMode" class="btn warn" type="button" @click="resetAll">收回示例数据（本地开发）</button>
         <button class="btn" type="button" @click="refresh">重新统计</button>
       </div>
     </header>
@@ -17,7 +18,7 @@
     </div>
     <table class="data-table">
       <thead>
-        <tr><th>业务模块</th><th>今日新增</th><th>待处理</th><th>异常量</th></tr>
+        <tr><th>业务模块</th><th>登记总量</th><th>待处理</th><th>异常量</th></tr>
       </thead>
       <tbody>
         <tr v-for="row in moduleRows" :key="row.name">
@@ -37,14 +38,23 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 
-import { loadOverview } from '@/api/local-service'
+import { loadOverview, resetAllModules } from '@/api/local-service'
 import type { OverviewResult } from '@/data/types'
+
+// 复位入口只在本地开发构建里出现，生产包不带这个按钮。
+const devMode = import.meta.env.DEV
 
 const cards = ref<OverviewResult['cards']>([])
 const moduleRows = ref<OverviewResult['modules']>([])
 
 function refresh() {
   const payload = loadOverview()
+  cards.value = payload.cards
+  moduleRows.value = payload.modules
+}
+
+function resetAll() {
+  const payload = resetAllModules()
   cards.value = payload.cards
   moduleRows.value = payload.modules
 }
