@@ -23,11 +23,16 @@
 
 ## 启动
 
+新同事只需要一条命令，依赖（按 `package-lock.json` 钉死版本）与示例数据校验一次装到位：
+
 ```bash
 cd frontend
-npm install
+npm run setup      # 等价：make setup
 npm run dev
 ```
+
+> 不要直接用 `npm install`：仓库已提交 `package-lock.json`，setup 走 `npm ci` 严格按锁安装，
+> 不会再出现“几个依赖版本对不上、本机留的是上月那份”。setup 可反复执行，幂等不增量。
 
 前端默认监听 `http://127.0.0.1:5173/`，dev server 不会自动打开浏览器，需要自己访问。
 
@@ -37,6 +42,25 @@ npm run dev
 cd frontend
 npm run build
 ```
+
+## 示例数据与本地复位（仅开发环境）
+
+- 示例数据唯一出处：`frontend/src/data/seed.json`。安装脚本、浏览器播种、复位都读这一份。
+  数据信封带版本号；`seed.json` 的 `version` 变化后，浏览器里的旧数据会按模块自动重补，
+  逐模块落盘，**装到一半断了重开页面会接着走，反复装载不会多出一份**，刷新后读到的仍是同一份。
+- 运营概览的「登记总量」与各模块列表的记录数走同一套计数（`moduleCounts`），天然同步；
+  读入本地数据时会校验结构，异常量、待办标记等出现非法值的模块整体挡回示例数据，不带病统计。
+- 本地开发想把数据收回初始状态：
+
+  ```bash
+  cd frontend
+  npm run db:reset     # 等价：make reset
+  ```
+
+  脚本会在需要时后台拉起 dev server，并给出 `http://127.0.0.1:5173/__dev_reset` 地址
+  （该入口只在 dev server 存在，生产构建没有）。用浏览器打开即完成复位并跳回首页：
+  各模块回到示例数据，**每个业务模块的待办清单会多出一条「开发环境数据已复位」尾迹**；
+  重复复位不叠加，复位过程中断后重开页面会续跑完成。
 
 ## 业务模块
 
@@ -65,7 +89,7 @@ npm run build
 
 - 每个模块的页面在 `frontend/src/views/<模块>/index.vue`，页面只负责渲染，读写统一走
   `frontend/src/api/local-service.ts`。
-- 字段、状态、动作与流转目标集中在 `frontend/src/data/modules.ts`；示例数据在
-  `frontend/src/data/seed.ts`。
+- 字段、状态、动作与流转目标集中在 `frontend/src/data/modules.ts`；示例数据唯一出处是
+  `frontend/src/data/seed.json`（`seed.ts` 只是它的薄封装），改示例数据后记得抬一下 `version`。
 - 状态流转只允许在 `local-service.ts` 里改，页面组件不做业务判断。
-- 想回到初始数据：清掉浏览器里 `substation-protection:entries` 这一项，或调用 `resetModule(模块)`。
+- 开发环境整体复位用 `npm run db:reset`；只想复位单个模块可调用 `resetModule(模块)`。
